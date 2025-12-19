@@ -1,0 +1,719 @@
+﻿                                ;*** AILZ80ASM *** Z-80 Assembler, version 1.0.31.0, LST:Full:4
+                                ;=================================
+                                ; z80block2.ASM 修正版 2025/12/19
+                                ;=================================
+000000 8000                             ORG 8000H
+                                ;=================================
+                                ; init.asm
+                                ;=================================
+                                ;---------------------------------
+                                ; S-OS CALL 
+                                ;     NAME EQU ADR  BRK REG
+                                ;---------------------------------
+       1FF4                     PRINT        EQU 1FF4H  ; F PRINT
+       1FE8                     MSG          EQU 1FE8H  ; F MESSAGE
+       1FC4                     BELL         EQU 1FC4H  ; AF
+       1FD0                     GETKY        EQU 1FD0H  ; AF
+       201E                     LOC          EQU 201EH  ; AF LOCATE
+       1FFA                     HOT          EQU 1FFAH  ; SYSTEM HOT Start
+       1FE2                     MPRINT       EQU 1FE2H  ; AF DE
+       1FC1                     PRTHX        EQU 1FC1H  ; AF DEBUG用
+       1FBE                     PRTHL        EQU 1FBEH  ; AF DEBUG用
+       201B                     SCRN         EQU 201BH  ; AF 指定位置のキャラを取得
+                                ;---------------------------------
+                                ; 定数
+                                ;---------------------------------
+       000C                     CLRS          EQU 0CH   ; 
+       0020                     MAX_X         EQU 20H   ; 32
+       0014                     MAX_Y         EQU 14H   ; 20
+       0007                     BL_H_CNT      EQU 7     ; 横の個数
+       0002                     BL_V_CNT      EQU 2     ; 縦の個数
+       0003                     BLOCK_X0      EQU 03H   ; 左始めX
+       0003                     BLOCK_Y0      EQU 03H   ; BLOCK 上
+       0006                     BLOCK_Y1      EQU 06H   ; BLOCK 下
+       0013                     PAD_Y         EQU 013H        ; PADDLEのY位置固定
+       0222                     SCORE_POS     EQU 0222H
+       022A                     SCORE_POS1    EQU 022AH
+       080C                     MES_POS       EQU 080CH 
+       1322                     REMAIN_BALL_POS EQU 1322H  ; Y:19 X:34
+       0035                     SPEED         EQU 35H
+                                ;--- Character ---
+       0085                     CHR_HWALL    EQU 085H 
+       0086                     CHR_VWALL    EQU 086H
+       00E6                     CHR_LPAD     EQU 0E6H
+       007D                     CHR_MPAD     EQU 07DH
+       00E7                     CHR_RPAD     EQU 0E7H
+       0083                     CHR_BLOCK    EQU 083H
+       00E0                     CHR_BALL     EQU 0E0H
+       00E4                     CHR_KADO     EQU 0E4H
+                                ;---------------------------------
+                                ; --- 初期化 ---
+                                ;---------------------------------
+       8000                     INIT:
+                                ; --- CLS ---
+000000 8000 3E0C             7          LD A,CLRS
+000002 8002 CDF41F          17          CALL PRINT         ; CLS
+                                ; --- BALL POS ---
+000005 8005 211012          10          LD HL,1210H        ; Y X
+000008 8008 22BE83          16          LD (BP0),HL
+00000B 800B 3EFF             7          LD A,-1
+00000D 800D 32E683          13          LD (VY),A
+000010 8010 32E583          13          LD (VX),A
+                                ; --- 壁 ---
+000013 8013 210000          10          LD HL,0000H
+000016 8016 3E85             7          LD A,CHR_HWALL         ; 横壁
+000018 8018 CDBF81          17          CALL HLINE
+00001B 801B 210000          10          LD HL,0000H
+00001E 801E 3E86             7          LD A,CHR_VWALL         ; 縦壁
+000020 8020 CDCB81          17          CALL VLINE
+000023 8023 212000          10          LD HL,MAX_X        ; 20H
+000026 8026 CDCB81          17          CALL VLINE
+000029 8029 3EE4             7          LD A,CHR_KADO          ; 左上 右上
+00002B 802B 210000          10          LD HL,0000H
+00002E 802E CD1E20          17          CALL LOC
+000031 8031 CDF41F          17          CALL PRINT
+000034 8034 212000          10          LD HL,MAX_X
+000037 8037 CD1E20          17          CALL LOC
+00003A 803A CDF41F          17          CALL PRINT
+                                ; --- BLOCKS
+00003D 803D 2603             7          LD H,BLOCK_Y0
+00003F 803F CDE281          17          CALL DRAW_BLOCKS
+000042 8042 2606             7          LD H,BLOCK_Y1
+000044 8044 CDE281          17          CALL DRAW_BLOCKS
+                                ; --- MAP_SET
+000047 8047 CDDD82          17          CALL INIT_MAP      ; BLOCK_MAPの初期化
+                                ; --- PAD 
+00004A 804A CDAB81          17          CALL DRAW_PAD
+                                ; --- Remaining BALL
+00004D 804D 21C083          10          LD HL,REMAIN_BALL
+000050 8050 3603            10          LD (HL),3
+                                ; --- BALL
+000052 8052 CDF481          17          CALL DRAW_REMAIN_BALL_LABEL
+000055 8055 CD1982          17          CALL DRAW_REMAIN_BALL
+                                ; --- SCORE
+000058 8058 212202          10          LD HL,SCORE_POS
+00005B 805B CD1E20          17          CALL LOC
+00005E 805E CDE21F          17          CALL MPRINT
+000061 8061 53434F5245203A20            DB 'SCORE : '
+000069 8069 00                          DB 0
+                                ; --- SCORE RESET
+00006A 806A 21C183          10          LD HL,SCORE_V
+00006D 806D 3E30             7          LD A,'0'
+00006F 806F 060A             7          LD B,10
+       8071                     SCL1:
+000071 8071 77               7          LD (HL),A
+000072 8072 23               6          INC HL
+000073 8073 10FC            13          DJNZ SCL1
+000075 8075 CD9682          17          CALL PRT_SCR
+                                
+                                ; --- WAIT KEY AND MAKE SEED---
+000078 8078 CD4982          17          CALL MK_SEED_WKEY
+                                
+                                ;=================================
+                                ; main.asm
+                                ;=================================
+                                ;*******************************
+                                ; MAIN LOOP
+                                ;*******************************
+       807B                     MAIN_LOOP:
+00007B 807B CD9682          17          CALL  PRT_SCR      ; スコア表示
+00007E 807E CDCA82          17          CALL  CHK_CLEAR    ; BLOCKの残りがあるか？
+000081 8081 CDE982          17          CALL  CAL_KARI_POS ; 次の予定POSを計算(TMPX,TMPY)
+000084 8084 FE15             7          CP    MAX_Y+1        ; 底
+000086 8086 3025            12          JR NC,MAIN_MISS   ; ★ミス
+000088 8088 CD1483          17          CALL  CHK_OBJ      ; 先の座標のオブジェクト
+00008B 808B CD5081          17          CALL  ERASE_BALL   ; 前のボールを消す
+00008E 808E CD0383          17          CALL  CAL_SEI_POS  ; 新しい座標を確定
+000091 8091 CD5C81          17          CALL  DRAW_BALL    ; ボールを描く
+000094 8094 CDC082          17          CALL  WAITTIME     ; 時間調整
+000097 8097 CDD01F          17          CALL  GETKY        
+00009A 809A FE71             7          CP  'q'
+00009C 809C 2812            12          JR Z, MAIN_OWARI   ; 強制終了
+00009E 809E FE6B             7          CP 'k'
+0000A0 80A0 CA6881          10          JP Z, PAD_LEFT  
+0000A3 80A3 FE6C             7          CP 'l'
+0000A5 80A5 CA7A81          10          JP Z, PAD_RIGHT
+       80A8                     MAIN1:
+0000A8 80A8 CDAB81          17          CALL  DRAW_PAD
+0000AB 80AB 18CE            12          JR    MAIN_LOOP
+       80AD                     MAIN_MISS:
+0000AD 80AD C3F680          10          JP    MISS_BALL      ; ミス
+       80B0                     MAIN_OWARI:
+0000B0 80B0 C33B81          10          JP    GAME_END       ; ゲームエンド
+                                
+                                ;--------------------------------------------------
+                                ; CLR_MEN
+                                ;--------------------------------------------------
+       80B3                     CLR_MEN:
+0000B3 80B3 210C08          10          LD HL,MES_POS
+0000B6 80B6 CD1E20          17          CALL LOC
+0000B9 80B9 11F483          10          LD DE,CLEAR_MSG
+0000BC 80BC CDE81F          17          CALL MSG
+       80BF                     CLRML:
+0000BF 80BF CDD01F          17          CALL GETKY        ; 押されるまで待つ
+0000C2 80C2 FE20             7          CP 20H            ; SP
+0000C4 80C4 2806            12          JR Z,RESTART1
+0000C6 80C6 FE71             7          CP 71H            ; q
+0000C8 80C8 2871            12          JR Z, GAME_END
+0000CA 80CA 20F3            12          JR NZ,CLRML
+       80CC                     RESTART1:
+0000CC 80CC C30080          10          JP INIT
+                                
+                                ;-------------------------------------------------
+                                ; GAME_ENDING
+                                ;-------------------------------------------------
+       80CF                     GAME_ENDING:
+0000CF 80CF 210C08          10          LD HL,MES_POS
+0000D2 80D2 CD1E20          17          CALL LOC
+0000D5 80D5 CDE21F          17          CALL MPRINT
+0000D8 80D8 47414D45204F5645            DB 'GAME OVER!     ',0
+            5221202020202000    
+       80E8                     KEY_WAIT:
+0000E8 80E8 CDD01F          17          CALL GETKY
+0000EB 80EB FE20             7          CP 20H            ; SP
+0000ED 80ED CA0080          10          JP Z,INIT
+0000F0 80F0 FE71             7          CP 71H            ; q
+0000F2 80F2 2847            12          JR Z, GAME_END
+0000F4 80F4 20F2            12          JR NZ,KEY_WAIT
+                                
+                                ;-------------------------------------------
+                                ; MISS
+                                ;-------------------------------------------
+       80F6                     MISS_BALL:
+0000F6 80F6 CD5081          17          CALL ERASE_BALL   ; 残像処理
+0000F9 80F9 CDF481          17          CALL DRAW_REMAIN_BALL_LABEL ;前の残ボール数を消す処理のため
+0000FC 80FC 3AC083          13          LD A,(REMAIN_BALL)
+0000FF 80FF FE00             7          CP 0
+000101 8101 28CC            12          JR Z,GAME_ENDING
+000103 8103 CD1082          17          CALL DRAW_REMAIN_BALL_DEC ;残りボールを描画
+000106 8106 CD4381          17          CALL SHOW_MISS    ; 表示 MISS
+       8109                     DRAW_NEXT_BALL:
+000109 8109 3AE783          13          LD A,(PADDLE_X)
+00010C 810C C602             7          ADD A,2
+00010E 810E 6F               4          LD L,A
+00010F 810F 2612             7          LD H,PAD_Y-1
+000111 8111 22BE83          16          LD (BP0),HL
+000114 8114 3EFF             7          LD A,0FFH
+000116 8116 32E683          13          LD (VY),A
+000119 8119 CD5C81          17          CALL DRAW_BALL
+       811C                     WAITMISS:
+00011C 811C CDD01F          17          CALL GETKY       ; 押されるまで待つ
+00011F 811F FE20             7          CP 20H            ; SP
+000121 8121 2806            12          JR Z,RESTART
+000123 8123 FE71             7          CP 71H            ; q
+000125 8125 2814            12          JR Z, GAME_END
+000127 8127 20F3            12          JR NZ,WAITMISS
+       8129                     RESTART:
+000129 8129 060A             7          LD B,10
+00012B 812B 210C08          10          LD HL,MES_POS
+00012E 812E CD1E20          17          CALL LOC
+       8131                     ERASE_MES_L:
+000131 8131 3E20             7          LD A,' '
+000133 8133 CDF41F          17          CALL PRINT
+000136 8136 10F9            13          DJNZ ERASE_MES_L  
+000138 8138 C37B80          10          JP MAIN_LOOP
+       813B                     GAME_END:
+00013B 813B 3E0C             7          LD A,CLRS
+00013D 813D CDF41F          17          CALL PRINT
+000140 8140 C3FA1F          10          JP HOT
+       8143                     SHOW_MISS:
+000143 8143 210C08          10          LD HL,MES_POS
+000146 8146 CD1E20          17          CALL LOC
+000149 8149 11ED83          10          LD DE,MISS_MSG
+00014C 814C CDE81F          17          CALL MSG
+00014F 814F C9              10          RET
+                                
+                                ;==================================================
+                                ; DRAW.ASM
+                                ;==================================================
+                                ;--------------------------------------
+                                ; ERASE_BALL
+                                ;--------------------------------------
+       8150                     ERASE_BALL:
+000150 8150 2ABE83          16          LD HL,(BP0)
+000153 8153 CD1E20          17          CALL LOC
+000156 8156 3E20             7          LD A,' '
+000158 8158 CDF41F          17          CALL PRINT
+00015B 815B C9              10          RET
+                                ;--------------------------------------
+                                ; DRAW_BALL 破壊 HL A 
+                                ;--------------------------------------
+       815C                     DRAW_BALL:
+00015C 815C 2ABE83          16          LD HL,(BP0)
+00015F 815F CD1E20          17          CALL LOC
+000162 8162 3EE0             7          LD A,CHR_BALL
+000164 8164 CDF41F          17          CALL PRINT
+000167 8167 C9              10          RET
+                                ;--------------------------------------
+                                ; PAD
+                                ;--------------------------------------
+       8168                     PAD_LEFT:
+000168 8168 CD9481          17          CALL ERASE_PAD
+00016B 816B 3AE783          13          LD A,(PADDLE_X)
+00016E 816E FE01             7          CP 01H
+000170 8170 CAA880          10          JP Z,MAIN1
+000173 8173 3D               4          DEC A
+000174 8174 32E783          13          LD (PADDLE_X),A
+000177 8177 C3A880          10          JP MAIN1
+       817A                     PAD_RIGHT:
+00017A 817A CD9481          17          CALL ERASE_PAD
+00017D 817D 3AE783          13          LD A,(PADDLE_X)
+000180 8180 4F               4          LD C,A
+000181 8181 3AE883          13          LD A,(PADDLE_W)
+000184 8184 81               4          ADD A,C
+000185 8185 FE20             7          CP MAX_X
+000187 8187 CAA880          10          JP Z,MAIN1
+00018A 818A 3AE783          13          LD A,(PADDLE_X)
+00018D 818D 3C               4          INC A
+00018E 818E 32E783          13          LD (PADDLE_X),A
+000191 8191 C3A880          10          JP MAIN1
+                                
+                                ;--------------------------------------
+                                ; ERASE_PAD 位置変数から場所取得
+                                ; 破壊 HL B
+                                ;--------------------------------------
+       8194                     ERASE_PAD:
+000194 8194 3E13             7          LD A,PAD_Y
+000196 8196 67               4          LD H,A
+000197 8197 3AE783          13          LD A,(PADDLE_X)
+00019A 819A 6F               4          LD L,A
+00019B 819B 3AE883          13          LD A,(PADDLE_W)
+00019E 819E 47               4          LD B,A
+00019F 819F CD1E20          17  EP1:    CALL LOC
+0001A2 81A2 3E20             7          LD A,' '
+0001A4 81A4 CDF41F          17          CALL PRINT
+0001A7 81A7 2C               4          INC L
+0001A8 81A8 10F5            13          DJNZ EP1
+0001AA 81AA C9              10          RET
+                                ;--------------------------------------
+                                ; DRAW_PAD 位置変数から場所取得
+                                ;--------------------------------------
+       81AB                     DRAW_PAD:
+0001AB 81AB 3E13             7          LD A,PAD_Y
+0001AD 81AD 67               4          LD H,A
+0001AE 81AE 3AE783          13          LD A,(PADDLE_X)
+0001B1 81B1 6F               4          LD L,A
+0001B2 81B2 CD1E20          17          CALL LOC
+0001B5 81B5 CDE21F          17          CALL MPRINT
+0001B8 81B8 E67D7D7DE700                DB CHR_LPAD,CHR_MPAD,CHR_MPAD,CHR_MPAD,CHR_RPAD,00
+0001BE 81BE C9              10          RET
+                                
+                                ;----------------------
+                                ; WALL DRAW HLに最初のYX座標
+                                ; H 横  B L 破壊
+                                ;----------------------
+       81BF                     HLINE:
+0001BF 81BF 0620             7          LD B,MAX_X
+0001C1 81C1 CD1E20          17  HL1:    CALL LOC
+0001C4 81C4 CDF41F          17          CALL PRINT
+0001C7 81C7 2C               4          INC L
+0001C8 81C8 10F7            13          DJNZ HL1
+0001CA 81CA C9              10          RET
+                                ;----------------------
+                                ; WALL DRAW HLに最初のYX座標
+                                ; V 縦  B L 破壊
+                                ;----------------------
+       81CB                     VLINE:
+0001CB 81CB 0614             7          LD B,MAX_Y
+0001CD 81CD CD1E20          17  VL1:    CALL LOC
+0001D0 81D0 CDF41F          17          CALL PRINT
+0001D3 81D3 24               4          INC H
+0001D4 81D4 10F7            13          DJNZ VL1
+0001D6 81D6 C9              10          RET
+                                ;---------------------------------
+                                ;  ブロック HLにLOCATIONを指定して呼ぶ
+                                ;---------------------------------
+       81D7                     DRAW_BLOCK:
+0001D7 81D7 CD1E20          17          CALL LOC
+0001DA 81DA CDE21F          17          CALL MPRINT  ; 破壊はDE
+0001DD 81DD 83                          DB CHR_BLOCK
+0001DE 81DE 83                          DB CHR_BLOCK
+0001DF 81DF 83                          DB CHR_BLOCK
+0001E0 81E0 00                          DB 0
+0001E1 81E1 C9              10          RET
+                                ; ---------------------------------------------
+                                ; DRAW_BLOCKS
+                                ; ---------------------------------------------
+       81E2                     DRAW_BLOCKS:
+0001E2 81E2 3E03             7          LD A,BLOCK_X0
+0001E4 81E4 6F               4          LD L,A
+0001E5 81E5 CDD781          17          CALL DRAW_BLOCK
+0001E8 81E8 0606             7          LD B,6
+       81EA                     DBS1:
+0001EA 81EA 7D               4          LD A,L
+0001EB 81EB C604             7          ADD A,4
+0001ED 81ED 6F               4          LD L,A
+0001EE 81EE CDD781          17          CALL DRAW_BLOCK
+0001F1 81F1 10F7            13          DJNZ DBS1
+0001F3 81F3 C9              10          RET
+                                
+                                ; ---------------------------------------------
+                                ; LEFT_BALL
+                                ; ---------------------------------------------
+       81F4                     DRAW_REMAIN_BALL_LABEL:
+0001F4 81F4 212213          10          LD HL,REMAIN_BALL_POS
+0001F7 81F7 CD1E20          17          CALL LOC
+0001FA 81FA CDE21F          17          CALL MPRINT
+0001FD 81FD 42414C4C203A2020            DB 'BALL :           ',0
+            2020202020202020    
+            2000                
+00020F 820F C9              10          RET
+       8210                     DRAW_REMAIN_BALL_DEC:
+000210 8210 21C083          10          LD HL,REMAIN_BALL
+000213 8213 7E               7          LD A,(HL)
+000214 8214 3D               4          DEC A
+000215 8215 77               7          LD (HL),A
+000216 8216 FE00             7          CP 0
+000218 8218 C8              11          RET Z
+       8219                     DRAW_REMAIN_BALL:
+000219 8219 212213          10          LD HL,REMAIN_BALL_POS
+00021C 821C 010800          10          LD BC,8
+00021F 821F 09              11          ADD HL,BC
+000220 8220 CD1E20          17          CALL LOC
+000223 8223 21C083          10          LD HL,REMAIN_BALL
+000226 8226 46               7          LD B,(HL)
+000227 8227 3EE0             7          LD A,CHR_BALL
+       8229                     DLB1:
+000229 8229 CDF41F          17          CALL PRINT
+00022C 822C 10FB            13          DJNZ DLB1
+00022E 822E C9              10          RET
+                                
+                                ;--------------------------------
+                                ;BLOCK MAP のクリア
+                                ;--------------------------------
+       822F                     CLEAR_BLOCK_MAP:
+00022F 822F 7D               4          LD A,L  ; X座標からMAPの位置
+000230 8230 3C               4          INC A    ; +1
+000231 8231 CB3F             8          SRL A    ; /2
+000233 8233 CB3F             8          SRL A    ; /4 3なら1 15なら4になる 0スタートではない
+000235 8235 47               4          LD B,A
+                                        ; Y座標      
+000236 8236 7C               4          LD A,H  ; Y座標
+000237 8237 FE03             7          CP BLOCK_Y0
+000239 8239 2005            12          JR NZ,BM1
+00023B 823B 21D683          10          LD HL,BL_MAP0 - 1
+00023E 823E 1803            12          JR BM2
+       8240                     BM1:
+000240 8240 21DD83          10          LD HL,BL_MAP1 - 1
+       8243                     BM2:
+000243 8243 23               6          INC HL
+000244 8244 10FD            13          DJNZ BM2
+000246 8246 3600            10          LD (HL),0
+000248 8248 C9              10          RET
+                                
+                                ;==================================================
+                                ; PROCEDURE.ASM
+                                ;==================================================
+                                ;--------------------------------
+                                ; 起動時に1回だけ呼ぶ
+                                ; HL A BC DE 破壊
+                                ;--------------------------------
+       8249                     MK_SEED_WKEY:
+000249 8249 210C08          10          LD HL,MES_POS
+00024C 824C CD1E20          17          CALL LOC
+00024F 824F 11FF83          10          LD DE,HAK_MSG
+000252 8252 CDE81F          17          CALL MSG
+000255 8255 210000          10          LD HL,0
+                                        ; キーが押されるまで無限ループでカウンタを増やす
+       8258                     WAIT_LOOP:
+000258 8258 23               6          INC HL                    ; 
+000259 8259 CDD01F          17          CALL GETKY               ; キー取得
+00025C 825C FE20             7          CP ' '                    ; SPキーが押された？
+00025E 825E 20F8            12          JR NZ,WAIT_LOOP           ; 押されてなければループ続行
+                                        ; HL が 0 にならないよう保険
+000260 8260 7C               4          LD A,H
+000261 8261 B5               4          OR L
+000262 8262 2003            12          JR NZ,SEED_OK
+000264 8264 213930          10          LD HL,12345               ; 0だったら適当な値に強制
+       8267                     SEED_OK:
+000267 8267 227882          16          LD (XRND+1),HL            ; XRNDのシードにセット
+00026A 826A 210C08          10          LD HL,080CH
+00026D 826D CD1E20          17          CALL LOC
+000270 8270 110B84          10          LD DE,HAK_MSG_ER
+000273 8273 CDE81F          17          CALL MSG
+000276 8276 C9              10          RET
+                                
+                                ;--------------------------------
+                                ; 乱数が必要な時
+                                ; 破壊 A 戻り値 HL 
+                                ;--------------------------------
+       8277                     XRND:
+000277 8277 210100          10          LD HL,1
+00027A 827A 7D               4          LD A,L
+00027B 827B 1F               4          RRA
+00027C 827C AC               4          XOR H
+00027D 827D 67               4          LD H,A          ; ← ここでHが更新される
+00027E 827E 1F               4          RRA             ; ← Aは「前のXOR結果」のまま回転 → 正しい！
+00027F 827F AC               4          XOR H
+000280 8280 67               4          LD H,A
+000281 8281 227882          16          LD (XRND+1),HL
+000284 8284 C9              10          RET
+                                
+       8285                     ADD_100:
+000285 8285 21C883          10      LD HL,SCORE_V + 7
+       8288                     ASL1:
+000288 8288 7E               7      LD A,(HL)
+000289 8289 FE39             7      CP '9'
+00028B 828B 2006            12      JR NZ,NO_UP
+00028D 828D 3E30             7      LD A,'0'
+00028F 828F 77               7      LD (HL),A
+000290 8290 2B               6      DEC HL
+000291 8291 18F5            12      JR ASL1
+       8293                     NO_UP:
+000293 8293 3C               4      INC A
+000294 8294 77               7      LD (HL),A
+000295 8295 C9              10      RET
+                                ;--------------------------
+                                ; スコアの表示
+                                ;--------------------------
+       8296                     PRT_SCR:
+000296 8296 060A             7      LD B,10
+000298 8298 21C183          10      LD HL,SCORE_V
+00029B 829B 11CC83          10      LD DE,SCORE_P
+       829E                     PSL1:
+00029E 829E 7E               7      LD A,(HL)
+00029F 829F 12               7      LD (DE),A
+0002A0 82A0 23               6      INC HL
+0002A1 82A1 13               6      INC DE
+0002A2 82A2 10FA            13      DJNZ PSL1
+0002A4 82A4 0609             7      LD B,9
+0002A6 82A6 21CC83          10      LD HL,SCORE_P
+       82A9                     PSL2:
+0002A9 82A9 7E               7      LD A,(HL)
+0002AA 82AA FE30             7      CP '0'
+0002AC 82AC 2005            12      JR NZ,NOT_0
+0002AE 82AE 365F            10      LD (HL),'_'
+0002B0 82B0 23               6      INC HL
+0002B1 82B1 10F6            13      DJNZ PSL2 
+       82B3                     NOT_0:
+0002B3 82B3 212A02          10      LD HL,SCORE_POS1
+0002B6 82B6 CD1E20          17      CALL LOC
+0002B9 82B9 11CC83          10      LD DE,SCORE_P
+0002BC 82BC CDE81F          17      CALL MSG
+0002BF 82BF C9              10      RET 
+                                ;-----------------------------------
+                                ; SPEED 調整
+                                ;-----------------------------------
+       82C0                     WAITTIME:
+0002C0 82C0 0635             7          LD B,SPEED     ;
+0002C2 82C2 0EFF             7  WT1:    LD C,0FFH
+0002C4 82C4 0D               4  WT2:    DEC C
+0002C5 82C5 20FD            12          JR NZ,WT2
+0002C7 82C7 10F9            13          DJNZ WT1
+0002C9 82C9 C9              10          RET
+                                
+                                ;CALC.ASM
+                                ;--------------------------------
+                                ; チェッククリア
+                                ;--------------------------------
+       82CA                     CHK_CLEAR:
+0002CA 82CA 21D783          10          LD HL,BL_MAP0
+0002CD 82CD 060E             7          LD B,14
+0002CF 82CF 0E00             7          LD C,0
+       82D1                     CCL:
+0002D1 82D1 7E               7          LD A,(HL)
+0002D2 82D2 FE01             7          CP 1
+0002D4 82D4 2806            12          JR Z ,NOT_CLEAR
+0002D6 82D6 23               6          INC HL
+0002D7 82D7 10F8            13          DJNZ CCL
+0002D9 82D9 C3B380          10          JP CLR_MEN
+       82DC                     NOT_CLEAR:
+0002DC 82DC C9              10          RET
+                                
+                                ;--------------------------------
+                                ;  BLOCK_MAP INIT
+                                ;--------------------------------
+       82DD                     INIT_MAP:
+0002DD 82DD 21D783          10          LD HL,BL_MAP0
+0002E0 82E0 060E             7          LD B,14
+0002E2 82E2 3E01             7          LD A,1
+       82E4                     IML:
+0002E4 82E4 77               7          LD (HL),A
+0002E5 82E5 23               6          INC HL
+0002E6 82E6 10FC            13          DJNZ IML
+0002E8 82E8 C9              10          RET
+                                ;--------------------------------
+                                ; 次のボールPOS （仮）
+                                ;--------------------------------
+       82E9                     CAL_KARI_POS:
+                                ; --- 現在の座標
+0002E9 82E9 2ABE83          16          LD HL,(BP0)  ;BALL前の位置
+0002EC 82EC 7D               4          LD A,L
+0002ED 82ED 32E983          13          LD (CURX),A
+0002F0 82F0 7C               4          LD A,H
+0002F1 82F1 32EA83          13          LD (CURY),A
+                                ; --- 次の予定座標
+0002F4 82F4 3AE583          13          LD A,(VX)
+0002F7 82F7 85               4          ADD A,L
+0002F8 82F8 32EB83          13          LD (TMPX),A
+0002FB 82FB 3AE683          13          LD A,(VY)
+0002FE 82FE 84               4          ADD A,H
+0002FF 82FF 32EC83          13          LD (TMPY),A
+000302 8302 C9              10          RET
+                                
+                                ;--------------------------------
+                                ; 次のボールPOS （正）
+                                ;--------------------------------
+       8303                     CAL_SEI_POS:
+000303 8303 2ABE83          16          LD HL,(BP0)
+000306 8306 3AE583          13          LD A,(VX)
+000309 8309 85               4          ADD A,L
+00030A 830A 6F               4          LD L,A      ;新しいXの位置L
+                                        ; --- Y確定 ---
+00030B 830B 3AE683          13          LD A,(VY)
+00030E 830E 84               4          ADD A,H
+00030F 830F 67               4          LD H,A
+000310 8310 22BE83          16          LD (BP0),HL  
+000313 8313 C9              10          RET
+                                
+                                ;--------------------------------
+                                ; 障害物チェック
+                                ;--------------------------------
+       8314                     CHK_OBJ:
+000314 8314 3AEC83          13          LD A,(TMPY)
+000317 8317 67               4          LD H,A
+000318 8318 3AEB83          13          LD A,(TMPX)
+00031B 831B 6F               4          LD L,A
+00031C 831C CD1B20          17          CALL SCRN    ; SYS CALL
+00031F 831F FEE6             7          CP CHR_LPAD
+000321 8321 2819            12          JR Z,PAD_L
+000323 8323 FE7D             7          CP CHR_MPAD
+000325 8325 282A            12          JR Z,PAD_M
+000327 8327 FEE7             7          CP CHR_RPAD
+000329 8329 282D            12          JR Z,PAD_R
+00032B 832B FE86             7          CP CHR_VWALL
+00032D 832D 283E            12          JR Z,VWALL1
+00032F 832F FE85             7          CP CHR_HWALL
+000331 8331 283E            12          JR Z,HWALL1
+000333 8333 FE83             7          CP CHR_BLOCK
+000335 8335 283E            12          JR Z,BLOCK1
+000337 8337 FEE4             7          CP CHR_KADO
+000339 8339 286A            12          JR Z,KADO1
+       833B                     CHK_OBJ_EXIT:
+00033B 833B C9              10          RET
+                                ;--------------------------------
+                                ; PAD1
+                                ;--------------------------------
+       833C                     PAD_L:
+00033C 833C 3EFF             7          LD A,-1
+00033E 833E 32E583          13          LD (VX),A
+000341 8341 3AEB83          13          LD A,(TMPX)
+000344 8344 FE00             7          CP 0
+000346 8346 2005            12          JR NZ,PAD_L1
+000348 8348 3E01             7          LD A,1
+00034A 834A 3AEB83          13          LD A,(TMPX)
+       834D                     PAD_L1:
+00034D 834D CDB583          17          CALL FLIP_VY
+000350 8350 C9              10          RET
+       8351                     PAD_M:
+000351 8351 CDB583          17          CALL FLIP_VY
+000354 8354 CDAC83          17          CALL FLIP_VX
+000357 8357 C9              10          RET
+       8358                     PAD_R:
+000358 8358 3E01             7          LD A,1
+00035A 835A 32E583          13          LD (VX),A
+00035D 835D 3AEB83          13          LD A,(TMPX)
+000360 8360 FE00             7          CP 0
+000362 8362 2005            12          JR NZ,PAD_R1
+000364 8364 3E01             7          LD A,1
+000366 8366 3AEB83          13          LD A,(TMPX)
+       8369                     PAD_R1:
+000369 8369 CDB583          17          CALL FLIP_VY
+00036C 836C C9              10          RET
+                                ;--------------------------------
+                                ; VWALL1
+                                ;--------------------------------
+       836D                     VWALL1:
+00036D 836D CDAC83          17          CALL FLIP_VX
+000370 8370 C9              10          RET
+                                ;--------------------------------
+                                ; HWALL1
+                                ;--------------------------------
+       8371                     HWALL1:
+000371 8371 CDB583          17          CALL FLIP_VY
+000374 8374 C9              10          RET
+                                ;--------------------------------
+                                ; BLOCK1
+                                ;--------------------------------
+       8375                     BLOCK1:         ; ヒットされたブロックの左端の位置を取得してブロックを消す
+000375 8375 CDC41F          17          CALL BELL
+000378 8378 7D               4          LD A,L  ; (X)
+000379 8379 3D               4          DEC A   ;
+00037A 837A 3D               4          DEC A   ; X-2
+00037B 837B CB3F             8          SRL A   ; /2
+00037D 837D CB3F             8          SRL A   ; /2
+00037F 837F CB27             8          SLA A   ; *2
+000381 8381 CB27             8          SLA A   ; *2
+000383 8383 3C               4          INC A
+000384 8384 3C               4          INC A
+000385 8385 3C               4          INC A
+000386 8386 6F               4          LD L,A
+000387 8387 3AEC83          13          LD A,(TMPY)
+00038A 838A 67               4          LD H,A
+00038B 838B E5              11          PUSH HL
+00038C 838C CD2F82          17          CALL CLEAR_BLOCK_MAP
+00038F 838F E1              10          POP HL
+000390 8390 CD1E20          17          CALL LOC
+000393 8393 CDE21F          17          CALL MPRINT
+000396 8396 20202000                    DB '   ',0
+00039A 839A CDB583          17          CALL FLIP_VY
+00039D 839D D5              11          PUSH DE
+00039E 839E E5              11          PUSH HL
+00039F 839F CD8582          17          CALL ADD_100
+0003A2 83A2 E1              10          POP HL
+0003A3 83A3 D1              10          POP DE
+0003A4 83A4 C9              10          RET
+       83A5                     KADO1:
+0003A5 83A5 CDAC83          17          CALL FLIP_VX
+0003A8 83A8 CDB583          17          CALL FLIP_VY
+0003AB 83AB C9              10          RET
+                                
+                                ;--------------------------------
+                                ;横反転  Aのみ使用
+                                ;--------------------------------
+       83AC                     FLIP_VX:
+0003AC 83AC 3AE583          13          LD A,(VX)
+0003AF 83AF ED44             8          NEG
+0003B1 83B1 32E583          13          LD (VX),A
+0003B4 83B4 C9              10          RET
+                                ;--------------------------------
+                                ;縦反転  Aのみ使用
+                                ;--------------------------------
+       83B5                     FLIP_VY:
+0003B5 83B5 3AE683          13          LD A,(VY)
+0003B8 83B8 ED44             8          NEG
+0003BA 83BA 32E683          13          LD (VY),A
+0003BD 83BD C9              10          RET
+                                
+                                ;==================================================
+                                ; VAR.ASM
+                                ; WORK AREA
+                                ;==================================================
+0003BE 83BE 0000                BP0:      DW 0000H  ;INIT でセットされる
+0003C0 83C0 03                  REMAIN_BALL DB 3
+       83C1                     SCORE_V:
+0003C1 83C1 3030303030303030        DB '0000000000',0DH
+            30300D              
+       83CC                     SCORE_P:
+0003CC 83CC 3030303030303030        DB '0000000000',0DH
+            30300D              
+                                
+0003D7 83D7 01010101010101      BL_MAP0    DB 1,1,1,1,1,1,1  ;ROW0*7COL
+0003DE 83DE 01010101010101      BL_MAP1    DB 1,1,1,1,1,1,1  ;ROW1*7COL
+                                
+0003E5 83E5 01                  VX:       DB 1
+0003E6 83E6 FF                  VY:       DB 0FFH
+0003E7 83E7 0E                  PADDLE_X: DB 0EH
+0003E8 83E8 05                  PADDLE_W: DB 05H
+0003E9 83E9 00                  CURX:     DB 0
+0003EA 83EA 00                  CURY:     DB 0
+0003EB 83EB 00                  TMPX:     DB 0
+0003EC 83EC 00                  TMPY:     DB 0
+0003ED 83ED 204D495353200D      MISS_MSG: DB ' MISS ',0DH
+0003F4 83F4 20434C4541522121    CLEAR_MSG: DB ' CLEAR!!! ',0DH
+            21200D              
+0003FF 83FF 48495420414E5920    HAK_MSG:     DB 'HIT ANY KEY',0DH
+            4B45590D            
+00040B 840B 2020202020202020    HAK_MSG_ER:  DB '               ',0DH
+            202020202020200D    
+[EOF:z80block2.asm:UTF_8]
